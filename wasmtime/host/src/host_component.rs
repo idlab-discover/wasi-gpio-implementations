@@ -24,7 +24,7 @@ impl GpioLike for rppal::gpio::Gpio {
 }
 
 pub struct HostComponent {
-    policies: policies::Policies,
+    pub policies: policies::Policies,
     gpio: Box<dyn GpioLike + Send>,
     pub table: wasmtime::component::ResourceTable,
     pub watcher: watch_event::Watcher,
@@ -45,7 +45,7 @@ impl HostComponent {
             .strip_prefix("GPIO")
             .and_then(|num| num.parse::<u8>().ok())
     }
-    
+
     
     pub fn get_pin(
         &self,
@@ -69,5 +69,9 @@ impl HostComponent {
                 return Err(bindings::wasi::gpio::general::GpioError::AlreadyInUse);
             }
         }
+    }
+
+    pub fn get_pin_resource<T: std::any::Any + Sized>(&self, key: &wasmtime::component::Resource<T>) -> Result<&T, bindings::wasi::gpio::general::GpioError> {
+        self.table.get(&key).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 }

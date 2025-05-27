@@ -132,6 +132,10 @@ impl DigitalInOutPin {
             bindings::wasi::gpio::general::ActiveLevel::ActiveLow => !pin_state,
         }
     }
+
+    pub fn set_pin_mode(&self, mode: bindings::wasi::gpio::general::PinMode) {
+        (*self.pin.lock().unwrap()).set_mode(mode.into());
+    }
 }
 
 pub struct StatefulDigitalOutPin {}
@@ -152,6 +156,15 @@ impl std::ops::Not for bindings::wasi::gpio::digital::PinState {
         match self {
             bindings::wasi::gpio::digital::PinState::Active => Self::Inactive,
             bindings::wasi::gpio::digital::PinState::Inactive => Self::Active,
+        }
+    }
+}
+
+impl From<bindings::wasi::gpio::general::PinMode> for rppal::gpio::Mode {
+    fn from(value: bindings::wasi::gpio::general::PinMode) -> Self {
+        match value {
+            bindings::wasi::gpio::general::PinMode::In => Self::Input,
+            bindings::wasi::gpio::general::PinMode::Out => Self::Output,
         }
     }
 }

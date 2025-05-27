@@ -10,11 +10,14 @@ pub struct Config {
 
 #[derive(serde::Deserialize, Debug, PartialEq)]
 #[serde(rename_all = "kebab-case")]
-enum Mode {
-    Input,
-    Output,
-    InputOutput,
-    StatefulOutput
+pub enum Mode {
+    DigitalInput,
+    DigitalOutput,
+    StatefulDigitalOutput,
+    DigitalInputOutput,
+    AnalogInput,
+    AnalogOutput,
+    AnalogInputOutput
 }
 
 #[derive(serde::Deserialize, Debug)]

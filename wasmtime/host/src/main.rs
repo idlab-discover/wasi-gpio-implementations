@@ -18,7 +18,6 @@ pub mod bindings {
     });
 }
 
-
 mod util;
 mod policies;
 
@@ -68,6 +67,10 @@ impl bindings::wasi::gpio::digital::HostDigitalInPin for HostComponent {
         pin_label: wasmtime::component::__internal::String,
         mut flags: wasmtime::component::__internal::Vec<bindings::wasi::gpio::digital::DigitalFlag>,
     ) -> Result<wasmtime::component::Resource<DigitalInPin>, bindings::wasi::gpio::general::GpioError> {
+        if !self.policies.is_mode_allowed(&pin_label, policies::Mode::DigitalInput) {
+            return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAllowed);
+        }
+
         let pin = match self.get_pin(&pin_label) {
             Ok(pin) => pin,
             Err(err) => {
@@ -224,18 +227,48 @@ impl bindings::wasi::gpio::digital::HostDigitalInPin for HostComponent {
 }
 
 impl bindings::wasi::gpio::digital::HostDigitalOutPin for HostComponent {
+    fn get(
+        &mut self,
+        pin_label: wasmtime::component::__internal::String,
+        mut flags: wasmtime::component::__internal::Vec<bindings::wasi::gpio::digital::DigitalFlag>,
+    ) -> Result<wasmtime::component::Resource<DigitalOutPin>, bindings::wasi::gpio::general::GpioError> {
+        if !self.policies.is_mode_allowed(&pin_label, policies::Mode::DigitalInput) {
+            return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAllowed);
+        }
+
+        let pin = match self.get_pin(&pin_label) {
+            Ok(pin) => pin,
+            Err(err) => {
+                return Err(err);
+            }
+        };
+
+        flags.push(bindings::wasi::gpio::digital::DigitalFlag::INPUT);
+
+        let mut config = digital::DigitalConfigBuilder::new(pin_label);
+        config.add_flags(flags);
+        let config = match config.build() {
+            Ok(config) => config,
+            Err(_) => return Err(bindings::wasi::gpio::general::GpioError::InvalidFlag),
+        };
+
+        match self.table.push(DigitalOutPin::new(pin, config)) {
+            Ok(pin) => Ok(pin),
+            Err(err) => Err(bindings::wasi::gpio::general::GpioError::Other(
+                err.to_string(),
+            )),
+        }
+    }
+
     fn get_config(
         &mut self,
         self_: wasmtime::component::Resource<DigitalOutPin>,
     ) -> Result<bindings::wasi::gpio::digital::DigitalConfig, bindings::wasi::gpio::general::GpioError> {
-        let pin = self.table.get(&self_).unwrap();
-
-        Ok(pin.get_config().clone())
+        Ok(self.table.get(&self_).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)?.get_config().clone())
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<DigitalOutPin>) -> bool {
-        let _ = self_;
-        true
+        todo!()
     }
 
     fn set_state(
@@ -265,38 +298,6 @@ impl bindings::wasi::gpio::digital::HostDigitalOutPin for HostComponent {
         self.table.delete(rep)?;
         Ok(())
     }
-
-    fn get(
-        &mut self,
-        pin_label: wasmtime::component::__internal::String,
-        mut flags: wasmtime::component::__internal::Vec<bindings::wasi::gpio::digital::DigitalFlag>,
-    ) -> Result<
-        wasmtime::component::Resource<DigitalOutPin>,
-        bindings::wasi::gpio::general::GpioError,
-    > {
-        let pin = match self.get_pin(&pin_label) {
-            Ok(pin) => pin,
-            Err(err) => {
-                return Err(err);
-            }
-        };
-
-        flags.push(bindings::wasi::gpio::digital::DigitalFlag::INPUT);
-
-        let mut config = digital::DigitalConfigBuilder::new(pin_label);
-        config.add_flags(flags);
-        let config = match config.build() {
-            Ok(config) => config,
-            Err(_) => return Err(bindings::wasi::gpio::general::GpioError::InvalidFlag),
-        };
-
-        match self.table.push(DigitalOutPin::new(pin, config)) {
-            Ok(pin) => Ok(pin),
-            Err(err) => Err(bindings::wasi::gpio::general::GpioError::Other(
-                err.to_string(),
-            )),
-        }
-    }
 }
 
 impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
@@ -304,12 +305,14 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
         &mut self,
         self_: wasmtime::component::Resource<DigitalInOutPin>,
     ) -> Result<bindings::wasi::gpio::digital::DigitalConfig, bindings::wasi::gpio::general::GpioError> {
-        Ok(self.table.get(&self_).unwrap().get_config().clone())
+        Ok(self.table.get(&self_).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)?.get_config().clone())
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<DigitalInOutPin>) -> bool {
-        let _ = self_;
-        true
+        match self.table.get(&self_) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     fn set_state(
@@ -317,7 +320,7 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
         self_: wasmtime::component::Resource<DigitalInOutPin>,
         state: bindings::wasi::gpio::digital::PinState,
     ) -> Result<(), bindings::wasi::gpio::general::GpioError> {
-        self.table.get_mut(&self_).unwrap().write(state);
+        self.table.get_mut(&self_).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)?.write(state);
         Ok(())
     }
 
@@ -340,7 +343,7 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
         self_: wasmtime::component::Resource<DigitalInOutPin>,
     ) -> Result<bindings::wasi::gpio::digital::PinState, bindings::wasi::gpio::general::GpioError>
     {
-        Ok(self.table.get(&self_).unwrap().read())
+        Ok(self.table.get(&self_).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)?.read())
     }
 
     fn is_active(
@@ -361,53 +364,6 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
         Ok(bindings::wasi::gpio::digital::PinState::Active == state)
     }
 
-    fn watch_state(
-        &mut self,
-        self_: wasmtime::component::Resource<DigitalInOutPin>,
-        state: bindings::wasi::gpio::digital::PinState,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        let _ = state;
-        let _ = self_;
-        todo!()
-    }
-
-    fn watch_active(
-        &mut self,
-        self_: wasmtime::component::Resource<DigitalInOutPin>,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        let _ = self_;
-        todo!()
-    }
-
-    fn watch_inactive(
-        &mut self,
-        self_: wasmtime::component::Resource<DigitalInOutPin>,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        let _ = self_;
-        todo!()
-    }
-
-    fn watch_falling_edge(
-        &mut self,
-        self_: wasmtime::component::Resource<DigitalInOutPin>,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        let _ = self_;
-        todo!()
-    }
-
-    fn watch_rising_edge(
-        &mut self,
-        self_: wasmtime::component::Resource<DigitalInOutPin>,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        let _ = self_;
-        todo!()
-    }
-
     fn drop(
         &mut self,
         rep: wasmtime::component::Resource<DigitalInOutPin>,
@@ -424,6 +380,10 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
         wasmtime::component::Resource<DigitalInOutPin>,
         bindings::wasi::gpio::general::GpioError,
     > {
+        if !self.policies.is_mode_allowed(&pin_label, policies::Mode::DigitalInput) {
+            return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAllowed);
+        }
+        
         let pin = match self.get_pin(&pin_label) {
             Ok(pin) => pin,
             Err(err) => {
@@ -445,6 +405,10 @@ impl bindings::wasi::gpio::digital::HostDigitalInOutPin for HostComponent {
             )),
         }
     }
+    
+    fn set_pin_mode(&mut self,self_:wasmtime::component::Resource<DigitalInOutPin>,pin_mode:bindings::wasi::gpio::general::PinMode,) -> Result<(),bindings::wasi::gpio::general::GpioError> {
+        Ok(self.table.get(&self_).map_err(|_| bindings::wasi::gpio::general::GpioError::ResourceInvalidated)?.set_pin_mode(pin_mode))
+    }
 }
 
 impl bindings::wasi::gpio::digital::HostStatefulDigitalOutPin for HostComponent {
@@ -456,18 +420,21 @@ impl bindings::wasi::gpio::digital::HostStatefulDigitalOutPin for HostComponent 
         wasmtime::component::Resource<StatefulDigitalOutPin>,
         bindings::wasi::gpio::general::GpioError,
     > {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::PinModeNotAvailable)
     }
 
     fn get_config(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<bindings::wasi::gpio::digital::DigitalConfig, bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<StatefulDigitalOutPin>) -> bool {
-        todo!()
+        match self.table.get(&self_) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     fn set_state(
@@ -475,42 +442,42 @@ impl bindings::wasi::gpio::digital::HostStatefulDigitalOutPin for HostComponent 
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
         state: bindings::wasi::gpio::digital::PinState,
     ) -> Result<(), bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn set_active(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<(), bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn set_inactive(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<(), bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn toggle(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<(), bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn is_set_active(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<bool, bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn is_set_inactive(
         &mut self,
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<bool, bindings::wasi::gpio::general::GpioError> {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn get_state(
@@ -518,14 +485,15 @@ impl bindings::wasi::gpio::digital::HostStatefulDigitalOutPin for HostComponent 
         self_: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> Result<bindings::wasi::gpio::digital::PinState, bindings::wasi::gpio::general::GpioError>
     {
-        todo!()
+        Err(bindings::wasi::gpio::general::GpioError::ResourceInvalidated)
     }
 
     fn drop(
         &mut self,
         rep: wasmtime::component::Resource<StatefulDigitalOutPin>,
     ) -> wasmtime::Result<()> {
-        todo!()
+        self.table.delete(rep)?;
+        Ok(())
     }
 }
 
@@ -550,7 +518,10 @@ impl bindings::wasi::gpio::analog::HostAnalogOutPin for HostComponent {
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<AnalogOutPin>) -> bool {
-        todo!()
+        match self.table.get(&self_) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     fn set_value_raw(
@@ -595,7 +566,10 @@ impl bindings::wasi::gpio::analog::HostAnalogInOutPin for HostComponent {
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<AnalogInOutPin>) -> bool {
-        todo!()
+        match self.table.get(&self_) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     fn set_value_raw(
@@ -628,43 +602,12 @@ impl bindings::wasi::gpio::analog::HostAnalogInOutPin for HostComponent {
         todo!()
     }
 
-    fn watch_above_raw(
-        &mut self,
-        self_: wasmtime::component::Resource<AnalogInOutPin>,
-        value: u32,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        todo!()
-    }
-
-    fn watch_above(
-        &mut self,
-        self_: wasmtime::component::Resource<AnalogInOutPin>,
-        value: f32,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        todo!()
-    }
-
-    fn watch_below_raw(
-        &mut self,
-        self_: wasmtime::component::Resource<AnalogInOutPin>,
-        value: u32,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        todo!()
-    }
-
-    fn watch_below(
-        &mut self,
-        self_: wasmtime::component::Resource<AnalogInOutPin>,
-        value: f32,
-    ) -> Result<wasmtime::component::Resource<Pollable>, bindings::wasi::gpio::general::GpioError>
-    {
-        todo!()
-    }
-
     fn drop(&mut self, rep: wasmtime::component::Resource<AnalogInOutPin>) -> wasmtime::Result<()> {
+        todo!()
+    }
+    
+    #[doc = " Sets the pin mode"]
+    fn set_pin_mode(&mut self,self_:wasmtime::component::Resource<AnalogInOutPin>,pin_mode:bindings::wasi::gpio::general::PinMode,) -> Result<(),bindings::wasi::gpio::general::GpioError> {
         todo!()
     }
 }
@@ -688,7 +631,10 @@ impl bindings::wasi::gpio::analog::HostAnalogInPin for HostComponent {
     }
 
     fn is_ready(&mut self, self_: wasmtime::component::Resource<AnalogInPin>) -> bool {
-        todo!()
+        match self.table.get(&self_) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
     fn read_raw(
