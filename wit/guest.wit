@@ -1,0 +1,8 @@
+package examples:gpio;
+
+world rpi {
+    use wasi:gpio/delay@0.2.0.{delay};
+    include wasi:gpio/imports@0.2.0;
+
+    export start: func(d: delay);
+}

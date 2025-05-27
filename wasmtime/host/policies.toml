@@ -1,0 +1,4 @@
+[[wasi.gpio]]
+vlabel = "LED1"
+modes = ["output"]
+plabel = "GPIO2"
