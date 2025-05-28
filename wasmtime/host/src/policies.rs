@@ -5,7 +5,10 @@ pub struct Config {
     policy_file: String,
     
     #[arg(short, long)]
-    component: String
+    component: String,
+
+    #[arg(short, long)]
+    pi_type: u8
 }
 
 #[derive(serde::Deserialize, Debug, PartialEq)]
@@ -53,6 +56,23 @@ impl Config {
 }
 
 impl Policies {
+    fn validate(&self) {
+        for entry in self.wasi.gpio.iter() {
+            for mode in entry.modes.iter() {
+                match mode {
+                    Mode::AnalogOutput => {
+                        match entry.plabel.as_str() {
+                            "PWM0" | "PWM1" | "PWM2" | "PWM3" => {},
+                            _ => panic!("Invalid PWM channel: {}", entry.plabel)
+                        }
+                    },
+                    Mode::AnalogInput | Mode::AnalogInputOutput => panic!("Analog input not supported on Raspberry Pi"),
+                    _ => {}
+                }
+            }
+        }
+    }
+
     fn find(&self, vlabel: &str) -> Option<&WasiGpioEntry> {
         for entry in self.wasi.gpio.iter() {
             if vlabel.eq(&entry.vlabel) {
@@ -62,11 +82,20 @@ impl Policies {
         
         None
     }
-    
+
     pub fn get_plabel(&self, vlabel: &str) -> Option<String> {
-        self.find(vlabel).map(|entry| entry.plabel.clone())
+        let plabel = match self.find(vlabel).map(|entry| entry.plabel.clone()) {
+            Some(plabel) => plabel,
+            None => return None,
+        };
+
+        if plabel.starts_with("GPIO") {
+            return Some(plabel)
+        }
+
+        None
     }
-    
+
     pub fn is_mode_allowed(&self, vlabel: &str, mode: Mode) -> bool {
         let entry = match self.find(vlabel) {
             Some(entry) => entry,

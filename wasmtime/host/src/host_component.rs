@@ -1,3 +1,7 @@
+use std::thread::panicking;
+
+use wasmtime_wasi::DynFuture;
+
 use super::bindings;
 use super::digital::DigitalInPin;
 use super::util::Shared;
@@ -25,13 +29,13 @@ impl GpioLike for rppal::gpio::Gpio {
 
 pub struct HostComponent {
     pub policies: policies::Policies,
-    gpio: Box<dyn GpioLike + Send>,
+    gpio: rppal::gpio::Gpio,
     pub table: wasmtime::component::ResourceTable,
     pub watcher: watch_event::Watcher,
 }
 
 impl HostComponent {
-    pub fn new(policies: policies::Policies, gpio: Box<dyn GpioLike + Send>) -> Self {
+    pub fn new(policies: policies::Policies, gpio: rppal::gpio::Gpio) -> Self {
         Self {
             policies,
             gpio,
@@ -47,7 +51,7 @@ impl HostComponent {
     }
 
     
-    pub fn get_pin(
+    pub fn get_digital_pin(
         &self,
         vlabel: &str,
     ) -> Result<rppal::gpio::Pin, bindings::wasi::gpio::general::GpioError> {
@@ -69,6 +73,31 @@ impl HostComponent {
                 return Err(bindings::wasi::gpio::general::GpioError::AlreadyInUse);
             }
         }
+    }
+
+    pub fn get_analog_pin(&self, vlabel: &str, pi_type: u8) -> Result<rppal::pwm::Pwm, bindings::wasi::gpio::general::GpioError> {
+        let plabel = match self.policies.get_plabel(vlabel) {
+            Some(plabel) => plabel,
+            None => return Err(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel),
+        };
+
+        let pwm_channel = if pi_type < 5 {
+            match plabel.to_lowercase().as_str() {
+                "gpio12" | "gpio18" => rppal::pwm::Channel::Pwm0,
+                "gpio13" | "gpio19" => rppal::pwm::Channel::Pwm1,
+                _ => return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAvailable)
+            }
+        } else {
+            match plabel.to_lowercase().as_str() {
+                "gpio12" => rppal::pwm::Channel::Pwm0,
+                "gpio13" => rppal::pwm::Channel::Pwm1,
+                "gpio18" => rppal::pwm::Channel::Pwm2,
+                "gpio19" => rppal::pwm::Channel::Pwm3,
+                _ => return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAvailable)
+            }
+        };
+
+        rppal::pwm::Pwm::new(pwm_channel).map_err(|e| bindings::wasi::gpio::general::GpioError::Other(e.to_string()))
     }
 
     pub fn get_pin_resource<T: std::any::Any + Sized>(&self, key: &wasmtime::component::Resource<T>) -> Result<&T, bindings::wasi::gpio::general::GpioError> {

@@ -1,13 +1,9 @@
 use std::env::var;
 
 use super::bindings;
-use super::util::Shared;
-use super::watch_event;
+use super::super::Shared;
 
-pub struct DigitalOutPin {
-    pin: rppal::gpio::OutputPin,
-    config: bindings::wasi::gpio::digital::DigitalConfig,
-}
+use super::{DigitalOutPin, DigitalInPin, DigitalInOutPin};
 
 impl DigitalOutPin {
     pub fn new(
@@ -43,11 +39,6 @@ impl From<bindings::wasi::gpio::digital::PinState> for rppal::gpio::Level {
             bindings::wasi::gpio::digital::PinState::Inactive => Self::Low,
         }
     }
-}
-
-pub struct DigitalInPin {
-    pin: Shared<rppal::gpio::InputPin>,
-    config: bindings::wasi::gpio::digital::DigitalConfig,
 }
 
 impl DigitalInPin {
@@ -88,11 +79,6 @@ impl DigitalInPin {
     pub fn clone_pin(&self) -> Shared<rppal::gpio::InputPin> {
         self.pin.clone()
     }
-}
-
-pub struct DigitalInOutPin {
-    pin: Shared<rppal::gpio::IoPin>,
-    config: bindings::wasi::gpio::digital::DigitalConfig,
 }
 
 impl DigitalInOutPin {
@@ -137,8 +123,6 @@ impl DigitalInOutPin {
         (*self.pin.lock().unwrap()).set_mode(mode.into());
     }
 }
-
-pub struct StatefulDigitalOutPin {}
 
 impl From<rppal::gpio::Level> for bindings::wasi::gpio::digital::PinState {
     fn from(value: rppal::gpio::Level) -> Self {
