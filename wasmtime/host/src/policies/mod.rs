@@ -53,6 +53,10 @@ impl Config {
     pub fn get_component_path(&self) -> &str {
         &self.component
     }
+
+    pub fn get_pi_type(&self) -> u8 {
+        self.pi_type
+    }
 }
 
 impl Policies {

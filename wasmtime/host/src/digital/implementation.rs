@@ -1,5 +1,3 @@
-use std::env::var;
-
 use super::bindings;
 use super::super::Shared;
 
@@ -9,9 +7,24 @@ impl DigitalOutPin {
     pub fn new(
         pin: rppal::gpio::Pin,
         config: bindings::wasi::gpio::digital::DigitalConfig,
+        pin_state: Option<bindings::wasi::gpio::digital::PinState>
     ) -> Self {
+        let pin = if let None = pin_state {
+            pin.into_output()
+        } else if let Some(bindings::wasi::gpio::digital::PinState::Inactive) = pin_state {
+            match &config.active_level {
+                bindings::wasi::gpio::general::ActiveLevel::ActiveHigh => pin.into_output_low(),
+                bindings::wasi::gpio::general::ActiveLevel::ActiveLow => pin.into_output_high(),
+            }
+        } else {
+            match &config.active_level {
+                bindings::wasi::gpio::general::ActiveLevel::ActiveHigh => pin.into_output_high(),
+                bindings::wasi::gpio::general::ActiveLevel::ActiveLow => pin.into_output_low(),
+            }
+        };
+
         Self {
-            pin: pin.into_output(),
+            pin,
             config,
         }
     }
@@ -85,11 +98,13 @@ impl DigitalInOutPin {
     pub fn new(
         pin: rppal::gpio::Pin,
         config: bindings::wasi::gpio::digital::DigitalConfig,
+        pin_mode: bindings::wasi::gpio::digital::PinMode
     ) -> Self {
-        Self {
-            pin: std::sync::Arc::new(std::sync::Mutex::new(pin.into_io(rppal::gpio::Mode::Input))),
-            config,
+        match pin_mode {
+            bindings::wasi::gpio::general::PinMode::In => Self { pin: pin.into_io(rppal::gpio::Mode::Input), config },
+            bindings::wasi::gpio::general::PinMode::Out => Self { pin: pin.into_io(rppal::gpio::Mode::Output), config },
         }
+        
     }
 
     pub fn get_config(&self) -> &bindings::wasi::gpio::digital::DigitalConfig {
@@ -104,11 +119,11 @@ impl DigitalInOutPin {
 
         let pin_state: rppal::gpio::Level = pin_state.into();
 
-        (*self.pin.lock().unwrap()).write(pin_state);
+        self.pin.write(pin_state);
     }
 
     pub fn read(&self) -> bindings::wasi::gpio::digital::PinState {
-        let pin_state = match (*self.pin.lock().unwrap()).read() {
+        let pin_state = match self.pin.read() {
             rppal::gpio::Level::Low => bindings::wasi::gpio::digital::PinState::Inactive,
             rppal::gpio::Level::High => bindings::wasi::gpio::digital::PinState::Active,
         };
@@ -119,8 +134,8 @@ impl DigitalInOutPin {
         }
     }
 
-    pub fn set_pin_mode(&self, mode: bindings::wasi::gpio::general::PinMode) {
-        (*self.pin.lock().unwrap()).set_mode(mode.into());
+    pub fn set_pin_mode(&mut self, mode: bindings::wasi::gpio::general::PinMode) {
+        self.pin.set_mode(mode.into());
     }
 }
 
@@ -153,18 +168,13 @@ impl From<bindings::wasi::gpio::general::PinMode> for rppal::gpio::Mode {
     }
 }
 
-pub struct DigitalConfigBuilder {
-    label: String,
-    pin_mode: Option<bindings::wasi::gpio::general::PinMode>,
-    active_level: Option<bindings::wasi::gpio::general::ActiveLevel>,
-    pull_resistor: Option<bindings::wasi::gpio::general::PullResistor>,
-}
+use super::DigitalConfigBuilder;
 
 impl DigitalConfigBuilder {
-    pub fn new(label: String) -> Self {
+    pub fn new(label: String, pin_mode: bindings::wasi::gpio::general::PinMode) -> Self {
         Self {
             label,
-            pin_mode: None,
+            pin_mode,
             active_level: None,
             pull_resistor: None,
         }
@@ -178,14 +188,10 @@ impl DigitalConfigBuilder {
         self.pull_resistor = Some(pull_resistor)
     }
 
-    fn add_pin_mode(&mut self, pin_mode: bindings::wasi::gpio::general::PinMode) {
-        self.pin_mode = Some(pin_mode)
-    }
-
     pub fn add_flags(
-        &mut self,
+        mut self,
         flags: wasmtime::component::__internal::Vec<bindings::wasi::gpio::digital::DigitalFlag>,
-    ) {
+    ) -> Self {
         for flag in flags {
             if flag == bindings::wasi::gpio::digital::DigitalFlag::ACTIVE_HIGH {
                 self.add_active_level(bindings::wasi::gpio::general::ActiveLevel::ActiveHigh);
@@ -195,26 +201,29 @@ impl DigitalConfigBuilder {
                 self.add_pull_resistor(bindings::wasi::gpio::general::PullResistor::PullUp);
             } else if flag == bindings::wasi::gpio::digital::DigitalFlag::PULL_DOWN {
                 self.add_pull_resistor(bindings::wasi::gpio::general::PullResistor::PullDown);
-            } else if flag == bindings::wasi::gpio::digital::DigitalFlag::INPUT {
-                self.add_pin_mode(bindings::wasi::gpio::general::PinMode::In);
-            } else if flag == bindings::wasi::gpio::digital::DigitalFlag::OUTPUT {
-                self.add_pin_mode(bindings::wasi::gpio::general::PinMode::Out);
             }
         }
+
+        self
     }
 
-    pub fn build(&self) -> Result<bindings::wasi::gpio::digital::DigitalConfig, ()> {
-        if self.pin_mode.is_none() {
-            return Err(());
-        }
-        if self.active_level.is_none() {
-            return Err(());
+    pub fn build(self) -> Result<bindings::wasi::gpio::digital::DigitalConfig, bindings::wasi::gpio::general::GpioError> {
+        let active_level = match self.active_level {
+            Some(active_level) => active_level,
+            None => return Err(bindings::wasi::gpio::general::GpioError::InvalidFlag),
+        };
+
+        match self.pin_mode {
+            bindings::wasi::gpio::general::PinMode::In => {},
+            bindings::wasi::gpio::general::PinMode::Out => {
+                if self.pull_resistor.is_some() { return Err(bindings::wasi::gpio::general::GpioError::InvalidFlag)}
+            },
         }
 
         Ok(bindings::wasi::gpio::digital::DigitalConfig {
             label: self.label.clone(),
-            pin_mode: self.pin_mode.unwrap(),
-            active_level: self.active_level.unwrap(),
+            pin_mode: self.pin_mode,
+            active_level,
             pull_resistor: self.pull_resistor,
         })
     }

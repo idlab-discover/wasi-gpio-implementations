@@ -1,8 +1,53 @@
 use super::bindings;
 use super::host_component;
-use super::{Pollable, AnalogInOutPin, AnalogInPin, AnalogOutPin};
+use super::{Pollable};
+
+pub struct AnalogConfigBuilder {
+    label: String,
+    pin_mode: bindings::wasi::gpio::general::PinMode,
+    output_mode: Option<bindings::wasi::gpio::analog::OutputMode>
+}
+
+impl AnalogConfigBuilder {
+    pub fn new(label: String, pin_mode: bindings::wasi::gpio::general::PinMode) -> Self {
+        Self { label, pin_mode, output_mode: None }
+    }
+
+    pub fn add_flags(mut self, flags: wasmtime::component::__internal::Vec<bindings::wasi::gpio::analog::AnalogFlag>) -> Self {
+        for flag in flags {
+            if flag == bindings::wasi::gpio::analog::AnalogFlag::PWM {
+                self.output_mode = Some(bindings::wasi::gpio::analog::OutputMode::Pwm)
+            }
+        }
+        
+        self
+    }
+
+    pub fn build(self) -> Result<bindings::wasi::gpio::analog::AnalogConfig, bindings::wasi::gpio::general::GpioError> {
+        match self.pin_mode {
+            bindings::wasi::gpio::general::PinMode::Out => {
+                if self.output_mode.is_none() { return Err(bindings::wasi::gpio::general::GpioError::InvalidFlag) }
+            },
+            bindings::wasi::gpio::general::PinMode::In => return Err(bindings::wasi::gpio::general::GpioError::PinModeNotAvailable),
+        }
+
+        Ok(bindings::wasi::gpio::analog::AnalogConfig {
+            label: self.label,
+            pin_mode: self.pin_mode,
+            output_mode: self.output_mode
+        })
+    }
+}
+
+pub struct AnalogInPin {}
+
+pub struct AnalogInOutPin {}
 
 impl bindings::wasi::gpio::analog::Host for host_component::HostComponent {}
+
+pub struct AnalogOutPin {
+    pin: rppal::pwm::Pwm
+}
 
 impl bindings::wasi::gpio::analog::HostAnalogOutPin for host_component::HostComponent {
     fn get(

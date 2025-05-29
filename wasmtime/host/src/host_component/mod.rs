@@ -1,7 +1,5 @@
 use std::thread::panicking;
 
-use wasmtime_wasi::DynFuture;
-
 use super::bindings;
 use super::digital::DigitalInPin;
 use super::util::Shared;
@@ -32,15 +30,17 @@ pub struct HostComponent {
     gpio: rppal::gpio::Gpio,
     pub table: wasmtime::component::ResourceTable,
     pub watcher: watch_event::Watcher,
+    pi_type: u8
 }
 
 impl HostComponent {
-    pub fn new(policies: policies::Policies, gpio: rppal::gpio::Gpio) -> Self {
+    pub fn new(policies: policies::Policies, gpio: rppal::gpio::Gpio, pi_type: u8) -> Self {
         Self {
             policies,
             gpio,
             table: wasmtime::component::ResourceTable::new(),
             watcher: watch_event::Watcher::new(),
+            pi_type
         }
     }
 
@@ -50,38 +50,30 @@ impl HostComponent {
             .and_then(|num| num.parse::<u8>().ok())
     }
 
+    pub fn get_pin(&self, vlabel: &str, mode: policies::Mode) {
+        match mode {
+            policies::Mode::DigitalInput | policies::Mode::DigitalOutput | policies::Mode::DigitalInputOutput => todo!(),
+            policies::Mode::AnalogOutput => todo!(),
+            _ => todo!()
+        }
+    }
+
     
     pub fn get_digital_pin(
         &self,
         vlabel: &str,
     ) -> Result<rppal::gpio::Pin, bindings::wasi::gpio::general::GpioError> {
-        let plabel = match self.policies.get_plabel(vlabel) {
-            Some(plabel) => plabel,
-            None => return Err(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel),
-        };
-        
-        let pin_nr = match Self::label_to_u8(&plabel) {
-            Some(pin_nr) => pin_nr,
-            None => {
-                return Err(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel);
-            }
-        };
+        let pin_nr = self.policies.get_plabel(vlabel)
+        .and_then(|plabel| Self::label_to_u8(&plabel))
+        .ok_or(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel)?;
 
-        match self.gpio.get(pin_nr) {
-            Ok(pin) => Ok(pin),
-            Err(_) => {
-                return Err(bindings::wasi::gpio::general::GpioError::AlreadyInUse);
-            }
-        }
+        self.gpio.get(pin_nr).map_err(|_| bindings::wasi::gpio::general::GpioError::AlreadyInUse)
     }
 
-    pub fn get_analog_pin(&self, vlabel: &str, pi_type: u8) -> Result<rppal::pwm::Pwm, bindings::wasi::gpio::general::GpioError> {
-        let plabel = match self.policies.get_plabel(vlabel) {
-            Some(plabel) => plabel,
-            None => return Err(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel),
-        };
+    pub fn get_analog_pin(&self, vlabel: &str) -> Result<rppal::pwm::Pwm, bindings::wasi::gpio::general::GpioError> {
+        let plabel = self.policies.get_plabel(vlabel).ok_or(bindings::wasi::gpio::general::GpioError::UndefinedPinLabel)?;
 
-        let pwm_channel = if pi_type < 5 {
+        let pwm_channel = if self.pi_type < 5 {
             match plabel.to_lowercase().as_str() {
                 "gpio12" | "gpio18" => rppal::pwm::Channel::Pwm0,
                 "gpio13" | "gpio19" => rppal::pwm::Channel::Pwm1,

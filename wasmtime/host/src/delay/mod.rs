@@ -1,6 +1,8 @@
 use super::bindings;
 use super::host_component;
 
+pub struct Delay {}
+
 impl bindings::wasi::gpio::delay::Host for host_component::HostComponent {}
 
 impl bindings::wasi::gpio::delay::HostDelay for host_component::HostComponent {

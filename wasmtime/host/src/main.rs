@@ -23,6 +23,13 @@ mod policies;
 mod delay;
 mod analog;
 mod digital;
+mod general;
+mod poll;
+
+pub use digital::{DigitalInOutPin, DigitalInPin, DigitalOutPin, StatefulDigitalOutPin};
+pub use delay::Delay;
+pub use analog::{AnalogInOutPin, AnalogInPin, AnalogOutPin};
+pub use poll::Pollable;
 
 use clap::Parser;
 use util::Shared;
@@ -31,15 +38,6 @@ mod host_component;
 use host_component::HostComponent;
 
 mod watch_event;
-
-pub struct AnalogInPin {}
-pub struct AnalogOutPin {}
-pub struct AnalogInOutPin {}
-pub struct Pollable {
-    trigger: Shared<bool>,
-}
-
-pub struct Delay {}
 
 struct State {
     ctx: wasmtime_wasi::WasiCtx,
@@ -57,8 +55,6 @@ impl wasmtime_wasi::WasiView for State {
         &mut self.ctx
     }
 }
-
-impl bindings::wasi::gpio::general::Host for HostComponent {}
 
 fn main() {
     let config = policies::Config::parse();
@@ -80,7 +76,7 @@ fn main() {
     
     let mut state = State {
         ctx: wasmtime_wasi::WasiCtxBuilder::new().inherit_stdio().build(),
-        host: HostComponent::new(policies, rppal::gpio::Gpio::new().unwrap())
+        host: HostComponent::new(policies, rppal::gpio::Gpio::new().unwrap(), config.get_pi_type())
     };
     
     let delay = state.host.table.push(Delay{}).unwrap();

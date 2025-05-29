@@ -1,4 +1,4 @@
 [[wasi.gpio]]
 vlabel = "LED1"
-modes = ["digital-output"]
-plabel = "GPIO2"
+modes = ["digital-output", "analog-output"]
+plabel = "GPIO12"
