@@ -1,0 +1,14 @@
+[package]
+name = "wasmtime-gpio-host"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+clap = { version = "4.5.38", features = ["derive"] }
+rppal = "0.22.1"
+serde = "1.0.219"
+serde_derive = "1.0.219"
+toml = "0.8.22"
+wasmtime = "32.0.0"
+wasmtime-wasi = "32.0.0"
+

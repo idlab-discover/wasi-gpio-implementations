@@ -1,0 +1,4 @@
+[gpio]
+url = "https://github.com/onraj55555/wasi-gpio/archive/refs/tags/release.tar.gz"
+sha256 = "bffe45fa5f841c01bc89c88e04b88f639e6e5c0fb9554afb53a23f0108e87d1d"
+sha512 = "ae6a4cb4e2f3df52964114007206790636858f2541744811f6b7bf3e0f077a411b0645ce69d48369f4a2629866663d6c4e096d4edaefae0b282ae92b85cee511"

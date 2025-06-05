@@ -1,0 +1,4 @@
+[[wasi.gpio]]
+vlabel = "POLL_PIN"
+modes = ["digital-input"]
+plabel = "GPIO2"

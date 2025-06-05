@@ -1,0 +1,1 @@
+Examples to show the PWM functionality of the API, software based PWM is used because hardware PWM requires configuration on the Raspberry Pi

@@ -1,0 +1,9 @@
+[[wasi.gpio]]
+vlabel = "PWM"
+modes = ["analog-output"]
+plabel = "GPIO2"
+
+[[wasi.gpio]]
+vlabel = "GPIO"
+modes = ["digital-output"]
+plabel = "GPIO2"

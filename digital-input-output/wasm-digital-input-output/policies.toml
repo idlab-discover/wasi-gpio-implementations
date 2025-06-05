@@ -1,0 +1,14 @@
+[[wasi.gpio]]
+vlabel = "OUT"
+modes = ["digital-output"]
+plabel = "GPIO2"
+
+[[wasi.gpio]]
+vlabel = "INOUT"
+modes = ["digital-input-output"]
+plabel = "GPIO3"
+
+[[wasi.gpio]]
+vlabel = "IN"
+modes = ["digital-input"]
+plabel = "GPIO4"

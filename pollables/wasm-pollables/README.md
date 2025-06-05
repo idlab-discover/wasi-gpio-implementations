@@ -1,0 +1,1 @@
+Checks the functionality of digital-input-pin.watch-inactive()

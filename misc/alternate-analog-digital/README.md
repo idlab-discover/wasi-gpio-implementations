@@ -1,0 +1,1 @@
+An example to show that pins can have multiple allowed modes and thus can switch between them
